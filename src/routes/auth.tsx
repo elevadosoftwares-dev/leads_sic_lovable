@@ -1,0 +1,115 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
+import { bootstrapFirstAdmin, isSetupRequired, MIN_PASSWORD_LENGTH, signIn } from "@/lib/auth.functions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/sic-ui";
+
+export const Route = createFileRoute("/auth")({
+  head: () => ({
+    meta: [
+      { title: "Sign in — LEADS SIC" },
+      { name: "description", content: "Sign in to manage technician safety inductions." },
+      { property: "og:title", content: "Sign in — LEADS SIC" },
+      { property: "og:description", content: "Sign in to manage technician safety inductions." },
+    ],
+  }),
+  component: AuthPage,
+});
+
+function AuthPage() {
+  const nav = useNavigate();
+  const queryClient = useQueryClient();
+  // A new database has no accounts: the first one created here becomes the admin.
+  const setup = useQuery({ queryKey: ["setup-required"], queryFn: () => isSetupRequired() }).data;
+  const firstRun = setup?.setupRequired === true;
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (firstRun) {
+        await bootstrapFirstAdmin({ data: { email, password } });
+        toast.success("Admin account created. Signing you in…");
+      }
+      await signIn({ data: { email, password } });
+      await queryClient.invalidateQueries();
+      nav({ to: "/dashboard" });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grid min-h-screen md:grid-cols-2">
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-auth p-12 text-nav-foreground md:flex">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-80 w-80 rounded-full bg-coral/30 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-16 h-80 w-80 rounded-full bg-teal/30 blur-3xl" />
+        <div className="pointer-events-none absolute right-24 top-1/3 h-40 w-40 rounded-full bg-sun/25 blur-2xl" />
+        <div className="flex items-center gap-2 font-display text-xl font-bold">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary">
+            <ShieldCheck className="h-5 w-5" />
+          </span>
+          LEADS SIC
+        </div>
+        <div>
+          <h1 className="text-4xl font-extrabold leading-tight">
+            The right technician,
+            <br />
+            <span className="text-sun">cleared for the right site.</span>
+          </h1>
+          <p className="mt-4 max-w-md text-nav-muted">
+            Track every safety induction course across your client sites, catch expiries before they happen, and plan
+            daily jobs with confidence.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <span className="h-2 w-10 rounded-full bg-coral" />
+          <span className="h-2 w-10 rounded-full bg-teal" />
+          <span className="h-2 w-10 rounded-full bg-sun" />
+          <span className="h-2 w-10 rounded-full bg-sky" />
+        </div>
+      </div>
+      <div className="flex items-center justify-center p-6">
+        <form onSubmit={submit} className="w-full max-w-sm space-y-5">
+          <div>
+            <h2 className="text-2xl font-bold">{firstRun ? "Create admin account" : "Welcome back"}</h2>
+            <p className="text-sm text-muted-foreground">
+              {firstRun
+                ? "No accounts exist yet. The first account you create becomes the admin."
+                : "Sign in to your SIC workspace"}
+            </p>
+          </div>
+          <Field label="Email">
+            <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label="Password">
+            <Input
+              type="password"
+              required
+              minLength={firstRun ? MIN_PASSWORD_LENGTH : undefined}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </Field>
+          <Button type="submit" variant="hero" className="h-11 w-full" disabled={busy}>
+            {busy ? "Please wait…" : firstRun ? "Create account" : "Sign in"}
+          </Button>
+          {!firstRun && (
+            <p className="text-center text-xs text-muted-foreground">
+              New accounts are created by an admin from the Users page.
+            </p>
+          )}
+        </form>
+      </div>
+    </div>
+  );
+}
