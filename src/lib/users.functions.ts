@@ -1,39 +1,24 @@
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import { requireAdmin } from "@/lib/auth-middleware";
-import { MIN_PASSWORD_LENGTH, type AppRole } from "@/lib/auth.functions";
 
-export interface AppUser {
-  id: string;
-  email: string;
-  role: AppRole;
+type Role = "admin" | "viewer";
+
+function validatePassword(password: string) {
+  if (!password || password.length < 6) throw new Error("Password must be at least 6 characters");
 }
 
-const roleSchema = z.enum(["admin", "viewer"]);
-const passwordSchema = z
-  .string()
-  .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
-
-export const listUsers = createServerFn({ method: "GET" })
-  .middleware([requireAdmin])
-  .handler(async (): Promise<AppUser[]> => {
-    const { request } = await import("@/server/db.server");
-    const req = await request();
-    const { recordset } = await req.query<AppUser>(
-      `SELECT id, email, role FROM dbo.users ORDER BY email`,
-    );
-    return recordset.map((u) => ({ ...u, id: u.id.toLowerCase() }));
-  });
-
-const createUserSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Invalid email"),
-  password: passwordSchema,
-  role: roleSchema,
-});
+function validateUserId(userId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(userId ?? "")) throw new Error("Missing user");
+}
 
 export const createUser = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
-  .inputValidator((d: unknown) => createUserSchema.parse(d))
+  .inputValidator((d: { email: string; password: string; role: Role }) => {
+    if (!/^\S+@\S+\.\S+$/.test(d.email)) throw new Error("Invalid email");
+    validatePassword(d.password);
+    if (d.role !== "admin" && d.role !== "viewer") throw new Error("Invalid role");
+    return { ...d, email: d.email.trim().toLowerCase() };
+  })
   .handler(async ({ data }) => {
     const { request, sql, isDuplicateKeyError } = await import("@/server/db.server");
     const { hashPassword } = await import("@/server/crypto.server");
@@ -56,10 +41,12 @@ export const createUser = createServerFn({ method: "POST" })
 
 export const setUserRole = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
-  .inputValidator((d: unknown) => z.object({ userId: z.string().uuid(), role: roleSchema }).parse(d))
-  .handler(async ({ data, context }) => {
-    if (data.userId.toLowerCase() === context.user.userId)
-      throw new Error("You can't change your own access");
+  .inputValidator((d: { userId: string; role: Role }) => {
+    validateUserId(d.userId);
+    if (d.role !== "admin" && d.role !== "viewer") throw new Error("Invalid role");
+    return d;
+  })
+  .handler(async ({ data }) => {
     const { request, sql } = await import("@/server/db.server");
     const req = await request();
     // Demoting is refused when it would leave no administrator; the lock hints make the
@@ -80,13 +67,15 @@ export const setUserRole = createServerFn({ method: "POST" })
 
 export const deleteUser = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
-  .inputValidator((d: unknown) => z.object({ userId: z.string().uuid() }).parse(d))
+  .inputValidator((d: { userId: string }) => {
+    validateUserId(d.userId);
+    return d;
+  })
   .handler(async ({ data, context }) => {
     if (data.userId.toLowerCase() === context.user.userId)
       throw new Error("You can't remove your own account");
     const { request, sql } = await import("@/server/db.server");
     const req = await request();
-    // The user's sessions are removed with it (ON DELETE CASCADE).
     await req
       .input("id", sql.UniqueIdentifier, data.userId)
       .query(`DELETE FROM dbo.users WHERE id = @id`);
@@ -95,22 +84,22 @@ export const deleteUser = createServerFn({ method: "POST" })
 
 export const resetUserPassword = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
-  .inputValidator((d: unknown) =>
-    z.object({ userId: z.string().uuid(), password: passwordSchema }).parse(d),
-  )
-  .handler(async ({ data, context }) => {
+  .inputValidator((d: { userId: string; password: string }) => {
+    validateUserId(d.userId);
+    validatePassword(d.password);
+    return d;
+  })
+  .handler(async ({ data }) => {
     const { request, sql } = await import("@/server/db.server");
     const { hashPassword } = await import("@/server/crypto.server");
     const req = await request();
-    // Signs the user out everywhere, except an admin resetting their own password.
-    const { rowsAffected } = await req
+    // Also signs the user out everywhere, so the old password stops working immediately.
+    await req
       .input("id", sql.UniqueIdentifier, data.userId)
       .input("password_hash", sql.NVarChar(256), await hashPassword(data.password))
-      .input("keep_sessions", sql.Bit, data.userId.toLowerCase() === context.user.userId)
       .query(
         `UPDATE dbo.users SET password_hash = @password_hash WHERE id = @id;
-         IF @keep_sessions = 0 DELETE FROM dbo.sessions WHERE user_id = @id;`,
+         DELETE FROM dbo.sessions WHERE user_id = @id;`,
       );
-    if (!rowsAffected[0]) throw new Error("This user no longer exists.");
     return { ok: true };
   });

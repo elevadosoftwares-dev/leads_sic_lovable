@@ -9,24 +9,16 @@ const INLINE_TYPES = new Set([
   "text/plain",
 ]);
 
-// Streams an uploaded file (site image, technician photo, attachment) to a signed-in user.
-export const Route = createFileRoute("/api/files/$id")({
+// Streams an uploaded file (see src/server/files.server.ts) to a signed-in user.
+export const Route = createFileRoute("/api/files/$")({
   server: {
     handlers: {
       GET: async ({ params }) => {
         const { getSessionUser } = await import("@/server/auth.server");
         if (!(await getSessionUser())) return new Response("Unauthorized", { status: 401 });
 
-        if (!/^[0-9a-f-]{36}$/i.test(params.id)) return new Response("Not found", { status: 404 });
-
-        const { request, sql } = await import("@/server/db.server");
-        const req = await request();
-        const { recordset } = await req.input("id", sql.UniqueIdentifier, params.id).query<{
-          file_name: string;
-          content_type: string;
-          data: Buffer;
-        }>(`SELECT file_name, content_type, data FROM dbo.files WHERE id = @id`);
-        const file = recordset[0];
+        const { readFile } = await import("@/server/files.server");
+        const file = params._splat ? await readFile(decodeURIComponent(params._splat)) : null;
         if (!file) return new Response("Not found", { status: 404 });
 
         // Only open known-safe types in the browser; anything else (HTML, SVG, ...) could run
@@ -39,8 +31,7 @@ export const Route = createFileRoute("/api/files/$id")({
             "content-length": String(file.data.length),
             "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.file_name)}`,
             "x-content-type-options": "nosniff",
-            // Files never change once uploaded (a replacement gets a new id).
-            "cache-control": "private, max-age=86400",
+            "cache-control": "private, max-age=3600",
           },
         });
       },

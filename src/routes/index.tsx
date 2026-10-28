@@ -4,9 +4,15 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "LEADS SIC — Safety Induction Tracker" },
-      { name: "description", content: "Register technicians and track safety induction courses by client site." },
+      {
+        name: "description",
+        content: "Register technicians and track safety induction courses by client site.",
+      },
       { property: "og:title", content: "LEADS SIC — Safety Induction Tracker" },
-      { property: "og:description", content: "Register technicians and track safety induction courses by client site." },
+      {
+        property: "og:description",
+        content: "Register technicians and track safety induction courses by client site.",
+      },
     ],
   }),
   beforeLoad: () => {

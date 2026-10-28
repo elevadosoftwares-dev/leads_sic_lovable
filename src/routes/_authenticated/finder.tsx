@@ -4,7 +4,15 @@ import { useMemo, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { sitesQuery, sicQuery } from "@/lib/data";
 import { sicStatus, fmtDate } from "@/lib/sic";
-import { PageHeader, Panel, PersonAvatar, StatusBadge, Empty, Field, selectCls } from "@/components/sic-ui";
+import {
+  PageHeader,
+  Panel,
+  PersonAvatar,
+  StatusBadge,
+  Empty,
+  Field,
+  selectCls,
+} from "@/components/sic-ui";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -38,16 +46,27 @@ function Finder() {
 
   return (
     <div>
-      <PageHeader title="Find a technician" subtitle="Search by name, optionally narrowed to a site" />
+      <PageHeader
+        title="Find a technician"
+        subtitle="Search by name, optionally narrowed to a site"
+      />
       <Panel className="mb-6 grid gap-4 md:grid-cols-2">
         <Field label="Site">
           <select className={selectCls} value={siteId} onChange={(e) => setSiteId(e.target.value)}>
             <option value="">All sites</option>
-            {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {sites.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Name filter">
-          <Input placeholder="Search technician…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input
+            placeholder="Search technician…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
         </Field>
       </Panel>
 
@@ -56,7 +75,9 @@ function Finder() {
         <span className="text-muted-foreground"> · {results.length - cleared.length} expired</span>
       </p>
       {results.length === 0 ? (
-        <Panel><Empty>No matching SIC records.</Empty></Panel>
+        <Panel>
+          <Empty>No matching SIC records.</Empty>
+        </Panel>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {results.map((r, i) => (
@@ -68,15 +89,19 @@ function Finder() {
                 r.st === "expired" && "opacity-55",
               )}
             >
-              <PersonAvatar name={r.employee?.name ?? "?"} fileId={r.employee?.image_id} size="lg" />
+              <PersonAvatar name={r.employee?.name ?? "?"} path={r.employee?.image_url} size="lg" />
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1 truncate font-bold">
                   {r.employee?.name}
                   {r.st !== "expired" && <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />}
                 </p>
                 <p className="truncate text-sm font-semibold text-primary">{r.site?.name}</p>
-                <p className="text-xs text-muted-foreground">SIC {fmtDate(r.sic_date)} · Exp {fmtDate(r.expiry_date)}</p>
-                <div className="mt-2"><StatusBadge expiry={r.expiry_date} /></div>
+                <p className="text-xs text-muted-foreground">
+                  SIC {fmtDate(r.sic_date)} · Exp {fmtDate(r.expiry_date)}
+                </p>
+                <div className="mt-2">
+                  <StatusBadge expiry={r.expiry_date} />
+                </div>
               </div>
             </div>
           ))}

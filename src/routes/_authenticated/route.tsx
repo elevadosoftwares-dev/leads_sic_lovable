@@ -1,18 +1,29 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
-  LayoutDashboard, ShieldCheck, Users, Building2, ClipboardList, AlarmClock, Search, LogOut, Menu, X, UserCog,
+  LayoutDashboard,
+  ShieldCheck,
+  Users,
+  Building2,
+  ClipboardList,
+  AlarmClock,
+  Search,
+  LogOut,
+  Menu,
+  X,
+  UserCog,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { signOut } from "@/lib/auth.functions";
-import { sessionQuery, useIsAdmin, useSession } from "@/lib/data";
+import { sessionQuery, useIsAdmin } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async ({ context }) => {
-    const session = await context.queryClient.fetchQuery({ ...sessionQuery, staleTime: 30_000 });
-    if (!session.userId) throw redirect({ to: "/auth" });
+    const user = await context.queryClient.fetchQuery(sessionQuery);
+    if (!user) throw redirect({ to: "/auth" });
+    return { user };
   },
   component: Layout,
 });
@@ -28,12 +39,14 @@ const nav = [
 ] as const;
 
 function Layout() {
-  const session = useSession();
-  const queryClient = useQueryClient();
+  const { user } = Route.useRouteContext();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const isAdmin = useIsAdmin();
-  const items = isAdmin ? [...nav, { to: "/users", label: "Users", icon: UserCog, chip: "bg-gradient-sky" }] : nav;
+  const items = isAdmin
+    ? [...nav, { to: "/users", label: "Users", icon: UserCog, chip: "bg-gradient-sky" }]
+    : nav;
 
   return (
     <div className="min-h-screen md:flex">
@@ -74,11 +87,11 @@ function Layout() {
           ))}
         </nav>
         <div className="mt-auto border-t border-sidebar-border pt-4">
-          <p className="truncate px-3 text-xs text-nav-muted">{session?.email}</p>
+          <p className="truncate px-3 text-xs text-nav-muted">{user.email}</p>
           <button
             onClick={async () => {
               await signOut();
-              queryClient.clear();
+              qc.clear();
               navigate({ to: "/auth" });
             }}
             className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-nav-muted hover:bg-nav-active hover:text-nav-foreground"

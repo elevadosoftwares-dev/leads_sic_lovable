@@ -1,41 +1,86 @@
 import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
-import { fileUrl } from "@/lib/files.functions";
 import { sicStatus, daysUntil } from "@/lib/sic";
 import { cn } from "@/lib/utils";
 
-const avatarColors = ["bg-gradient-coral", "bg-gradient-teal", "bg-gradient-sky", "bg-gradient-sun"];
+/** Address of an uploaded file (served to signed-in users by src/routes/api/files/$.ts). */
+export function useSignedUrl(path: string | null | undefined) {
+  return path ? `/api/files/${path.split("/").map(encodeURIComponent).join("/")}` : null;
+}
 
-/** `fileId` is the id of an uploaded file (see src/lib/files.functions.ts). */
-export function PersonAvatar({ name, fileId, size = "md" }: { name: string; fileId?: string | null; size?: "md" | "lg" }) {
-  const url = fileUrl(fileId);
-  const initials = name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+const avatarColors = [
+  "bg-gradient-coral",
+  "bg-gradient-teal",
+  "bg-gradient-sky",
+  "bg-gradient-sun",
+];
+
+export function PersonAvatar({
+  name,
+  path,
+  size = "md",
+}: {
+  name: string;
+  path?: string | null;
+  size?: "md" | "lg";
+}) {
+  const url = useSignedUrl(path);
+  const initials = name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
   const color = avatarColors[name.length % avatarColors.length];
   const dim = size === "lg" ? "h-[7.2rem] w-[7.2rem] text-3xl" : "h-15 w-15 text-base";
   if (url) return <img src={url} alt={name} className={cn("rounded-full object-cover", dim)} />;
   return (
-    <div className={cn("flex shrink-0 items-center justify-center rounded-full font-bold text-primary-foreground", color, dim)}>
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full font-bold text-primary-foreground",
+        color,
+        dim,
+      )}
+    >
       {initials}
     </div>
   );
 }
 
-export function SiteThumb({ name, fileId, className }: { name: string; fileId?: string | null; className?: string }) {
-  const url = fileUrl(fileId);
+export function SiteThumb({
+  name,
+  path,
+  className,
+}: {
+  name: string;
+  path?: string | null;
+  className?: string;
+}) {
+  const url = useSignedUrl(path);
   const dim = className ?? "h-[4.125rem] w-24";
   if (url) return <img src={url} alt={name} className={cn("rounded-lg object-cover", dim)} />;
   return (
-    <div className={cn("flex shrink-0 items-center justify-center rounded-lg bg-gradient-teal font-display text-xl font-bold text-primary-foreground", dim)}>
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-lg bg-gradient-teal font-display text-xl font-bold text-primary-foreground",
+        dim,
+      )}
+    >
       {name.slice(0, 2).toUpperCase()}
     </div>
   );
 }
 
-export function FileLink({ fileId }: { fileId?: string | null }) {
-  const url = fileUrl(fileId);
-  if (!url) return null;
+export function FileLink({ path }: { path?: string | null }) {
+  const url = useSignedUrl(path);
+  if (!path) return null;
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-sky hover:underline">
+    <a
+      href={url ?? "#"}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1 text-xs font-semibold text-sky hover:underline"
+    >
       <FileText className="h-3.5 w-3.5" /> Attachment
     </a>
   );
@@ -49,11 +94,29 @@ export function StatusBadge({ expiry }: { expiry: string | null }) {
     expired: "bg-destructive/15 text-destructive",
   };
   const label =
-    s === "expired" ? "Expired" : s === "expiring" ? `${daysUntil(expiry!)}d left` : expiry ? "Valid" : "No expiry";
-  return <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-bold", map[s])}>{label}</span>;
+    s === "expired"
+      ? "Expired"
+      : s === "expiring"
+        ? `${daysUntil(expiry!)}d left`
+        : expiry
+          ? "Valid"
+          : "No expiry";
+  return (
+    <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-bold", map[s])}>
+      {label}
+    </span>
+  );
 }
 
-export function PageHeader({ title, subtitle, children }: { title: string; subtitle?: string; children?: ReactNode }) {
+export function PageHeader({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children?: ReactNode;
+}) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
@@ -74,7 +137,11 @@ export function PageHeader({ title, subtitle, children }: { title: string; subti
 }
 
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("rounded-2xl border bg-card p-4 shadow-card md:p-6", className)}>{children}</div>;
+  return (
+    <div className={cn("rounded-2xl border bg-card p-4 shadow-card md:p-6", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {

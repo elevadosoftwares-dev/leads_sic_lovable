@@ -13,6 +13,7 @@ export type AppRole = "admin" | "viewer";
 export type SessionUser = {
   userId: string;
   email: string;
+  fullName: string;
   role: AppRole;
 };
 
@@ -52,10 +53,11 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const { recordset } = await req.input("token_hash", sql.Char(64), tokenHash).query<{
     id: string;
     email: string;
+    full_name: string;
     role: AppRole;
     expires_at: Date;
   }>(
-    `SELECT u.id, u.email, u.role, s.expires_at
+    `SELECT u.id, u.email, u.full_name, u.role, s.expires_at
        FROM dbo.sessions s JOIN dbo.users u ON u.id = s.user_id
       WHERE s.token_hash = @token_hash AND s.expires_at > SYSUTCDATETIME()`,
   );
@@ -72,7 +74,12 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     setCookie(COOKIE_NAME, token, cookieOptions(expires));
   }
 
-  return { userId: row.id.toLowerCase(), email: row.email, role: row.role };
+  return {
+    userId: row.id.toLowerCase(),
+    email: row.email,
+    fullName: row.full_name,
+    role: row.role,
+  };
 }
 
 export async function destroySession(): Promise<void> {

@@ -4,7 +4,8 @@ export type SicStatus = "valid" | "expiring" | "expired";
 export const EXPIRING_WINDOW_DAYS = 30;
 
 function toDay(d: string | Date) {
-  const x = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : new Date(d);
+  const x =
+    typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : new Date(d);
   x.setHours(0, 0, 0, 0);
   return x;
 }

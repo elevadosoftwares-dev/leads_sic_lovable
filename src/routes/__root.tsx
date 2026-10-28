@@ -76,7 +76,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "LEADS SIC — Safety Induction Tracker" },
-      { name: "description", content: "Track technician safety induction courses by client site and expiry." },
+      {
+        name: "description",
+        content: "Track technician safety induction courses by client site and expiry.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

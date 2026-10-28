@@ -1,145 +1,289 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "@/lib/auth-middleware";
-import {
-  daySchema,
-  idSchema,
-  isoDate,
-  isoDateOrNull,
-  lowerId,
-  lowerIdOrNull,
-  optionalIdSchema,
-  toSqlDate,
-} from "@/lib/rows";
 
-export interface SicRecord {
+export type Site = { id: string; name: string; image_url: string | null; created_at: string };
+export type Department = { id: string; name: string; created_at: string };
+export type Employee = {
+  id: string;
+  name: string;
+  designation: string | null;
+  image_url: string | null;
+  status: string;
+  department_id: string | null;
+  created_at: string;
+  department: { id: string; name: string } | null;
+};
+export type SicRecord = {
   id: string;
   site_id: string;
   employee_id: string;
   sic_date: string;
   pass_issued: boolean;
   expiry_date: string | null;
-  attachment_id: string | null;
+  attachment_url: string | null;
+  created_at: string;
   site: { id: string; name: string };
-  employee: { id: string; name: string; image_id: string | null; status: string };
-}
-
-type SicRow = {
+  employee: { id: string; name: string; image_url: string | null; status: string };
+};
+export type Booking = {
   id: string;
   site_id: string;
-  employee_id: string;
-  sic_date: Date;
-  pass_issued: boolean;
-  expiry_date: Date | null;
-  attachment_id: string | null;
-  site_name: string;
-  employee_name: string;
-  employee_image_id: string | null;
-  employee_status: string;
+  contact_person: string;
+  email: string;
+  mobile: string;
+  sic_session: string | null;
+  remarks: string | null;
+  note: string | null;
+  attachment_url: string | null;
+  created_at: string;
+  site: { id: string; name: string };
 };
+export type UserRole = { id: string; user_id: string; email: string; role: "admin" | "viewer" };
+
+/** Embeds `table` row `fk` as a nested object, e.g. `site: { id, name }` on each row. */
+const embed = (table: string, cols: string, fk: string, as: string) =>
+  `JSON_QUERY((SELECT ${cols} FROM dbo.${table} x WHERE x.id = ${fk} FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)) AS ${as}`;
+
+// ------------------------------------------------------------------ reads (any signed-in user)
+
+export const listSites = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .handler(async () => {
+    const { selectJson } = await import("@/server/rows.server");
+    return selectJson<Site>(`SELECT id, name, image_url, created_at FROM dbo.sites ORDER BY name`);
+  });
+
+export const listEmployees = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .handler(async () => {
+    const { selectJson } = await import("@/server/rows.server");
+    return selectJson<Employee>(
+      `SELECT e.id, e.name, e.designation, e.image_url, e.status, e.department_id, e.created_at,
+              ${embed("departments", "x.id, x.name", "e.department_id", "department")}
+         FROM dbo.employees e ORDER BY e.name`,
+    );
+  });
+
+export const listDepartments = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .handler(async () => {
+    const { selectJson } = await import("@/server/rows.server");
+    return selectJson<Department>(`SELECT id, name, created_at FROM dbo.departments ORDER BY name`);
+  });
 
 export const listSicRecords = createServerFn({ method: "GET" })
   .middleware([requireAuth])
-  .handler(async (): Promise<SicRecord[]> => {
-    const { request } = await import("@/server/db.server");
-    const req = await request();
-    const { recordset } = await req.query<SicRow>(
-      `SELECT r.id, r.site_id, r.employee_id, r.sic_date, r.pass_issued, r.expiry_date, r.attachment_id,
-              s.name AS site_name, e.name AS employee_name, e.image_id AS employee_image_id,
-              e.status AS employee_status
-         FROM dbo.sic_records r
-         JOIN dbo.sites s ON s.id = r.site_id
-         JOIN dbo.employees e ON e.id = r.employee_id
-        ORDER BY r.sic_date DESC, r.created_at DESC`,
+  .handler(async () => {
+    const { selectJson } = await import("@/server/rows.server");
+    return selectJson<SicRecord>(
+      `SELECT r.id, r.site_id, r.employee_id, r.sic_date, r.pass_issued, r.expiry_date,
+              r.attachment_url, r.created_at,
+              ${embed("sites", "x.id, x.name", "r.site_id", "site")},
+              ${embed("employees", "x.id, x.name, x.image_url, x.status", "r.employee_id", "employee")}
+         FROM dbo.sic_records r ORDER BY r.sic_date DESC`,
     );
-    return recordset.map((r) => {
-      const site_id = lowerId(r.site_id);
-      const employee_id = lowerId(r.employee_id);
-      return {
-        id: lowerId(r.id),
-        site_id,
-        employee_id,
-        sic_date: isoDate(r.sic_date),
-        pass_issued: r.pass_issued,
-        expiry_date: isoDateOrNull(r.expiry_date),
-        attachment_id: lowerIdOrNull(r.attachment_id),
-        site: { id: site_id, name: r.site_name },
-        employee: {
-          id: employee_id,
-          name: r.employee_name,
-          image_id: lowerIdOrNull(r.employee_image_id),
-          status: r.employee_status,
-        },
-      };
-    });
   });
 
-const MAX_EMPLOYEES_PER_SAVE = 500;
+export const listBookings = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .handler(async () => {
+    const { selectJson } = await import("@/server/rows.server");
+    return selectJson<Booking>(
+      `SELECT b.id, b.site_id, b.contact_person, b.email, b.mobile, b.sic_session, b.remarks,
+              b.note, b.attachment_url, b.created_at,
+              ${embed("sites", "x.id, x.name", "b.site_id", "site")}
+         FROM dbo.booking_instructions b ORDER BY b.created_at DESC`,
+    );
+  });
 
-const saveSicSchema = z
-  .object({
-    /** Set when editing one record; then exactly one employee is given. */
-    id: idSchema.optional(),
-    site_id: idSchema,
-    employee_ids: z
-      .array(idSchema)
-      .min(1, "Choose at least one technician")
-      .max(MAX_EMPLOYEES_PER_SAVE),
-    sic_date: daySchema,
-    pass_issued: z.boolean(),
-    expiry_date: daySchema.nullable(),
-    attachment_id: optionalIdSchema,
-  })
-  .refine((v) => !v.id || v.employee_ids.length === 1, "Choose one technician");
+export const listUserRoles = createServerFn({ method: "GET" })
+  .middleware([requireAuth])
+  .handler(async () => {
+    const { selectJson } = await import("@/server/rows.server");
+    return selectJson<UserRole>(
+      `SELECT id, id AS user_id, email, role FROM dbo.users ORDER BY email`,
+    );
+  });
 
-/** Registers one SIC record per selected technician, or updates a single record. */
+// ------------------------------------------------------------------ writes (admins only)
+
+const id = z.string().uuid();
+const optionalText = z
+  .string()
+  .nullish()
+  .transform((v) => (v?.trim() ? v.trim() : null));
+const filePath = z
+  .string()
+  .max(400)
+  .nullish()
+  .transform((v) => v || null);
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.");
+
+const deleteSchema = z.object({ id });
+
+const siteSchema = z.object({
+  id: id.optional(),
+  name: z.string().trim().min(1, "Enter a site name.").max(300),
+  image_url: filePath,
+});
+
+export const saveSite = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) => siteSchema.parse(d))
+  .handler(async ({ data: { id, ...row } }) => {
+    const { insertRow, updateRow } = await import("@/server/rows.server");
+    if (id) await updateRow("sites", id, row);
+    else await insertRow("sites", row);
+    return { ok: true };
+  });
+
+export const deleteSite = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) => deleteSchema.parse(d))
+  .handler(async ({ data }) => {
+    const { deleteRow } = await import("@/server/rows.server");
+    // SIC records and booking instructions for the site go with it (ON DELETE CASCADE).
+    await deleteRow("sites", data.id);
+    return { ok: true };
+  });
+
+const employeeSchema = z.object({
+  id: id.optional(),
+  name: z.string().trim().min(1, "Enter a name.").max(200),
+  designation: optionalText,
+  status: z.enum(["active", "inactive"]),
+  image_url: filePath,
+  department_id: id
+    .nullish()
+    .or(z.literal(""))
+    .transform((v) => v || null),
+});
+
+export const saveEmployee = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) => employeeSchema.parse(d))
+  .handler(async ({ data: { id, ...row } }) => {
+    const { insertRow, updateRow } = await import("@/server/rows.server");
+    if (id) await updateRow("employees", id, row);
+    else await insertRow("employees", row);
+    return { ok: true };
+  });
+
+export const deleteEmployee = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) => deleteSchema.parse(d))
+  .handler(async ({ data }) => {
+    const { deleteRow } = await import("@/server/rows.server");
+    await deleteRow("employees", data.id);
+    return { ok: true };
+  });
+
+export const addDepartment = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) =>
+    z.object({ name: z.string().trim().min(1, "Enter a name.").max(200) }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { insertRow } = await import("@/server/rows.server");
+    const { isDuplicateKeyError } = await import("@/server/db.server");
+    try {
+      await insertRow("departments", { name: data.name });
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw new Error(`"${data.name}" already exists.`);
+      throw error;
+    }
+    return { ok: true };
+  });
+
+export const deleteDepartment = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) => deleteSchema.parse(d))
+  .handler(async ({ data }) => {
+    const { deleteRow } = await import("@/server/rows.server");
+    await deleteRow("departments", data.id);
+    return { ok: true };
+  });
+
+const sicSchema = z.object({
+  id: id.optional(),
+  site_id: id,
+  /** One technician when editing; one or more when registering. */
+  employee_ids: z.array(id).min(1, "Select at least one technician."),
+  sic_date: date,
+  pass_issued: z.boolean(),
+  expiry_date: date
+    .nullish()
+    .or(z.literal(""))
+    .transform((v) => v || null),
+  attachment_url: filePath,
+});
+
 export const saveSicRecords = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
-  .inputValidator((d: z.input<typeof saveSicSchema>) => saveSicSchema.parse(d))
-  .handler(async ({ data }) => {
-    const { request, sql } = await import("@/server/db.server");
-    const req = await request();
-    req
-      .input("site_id", sql.UniqueIdentifier, data.site_id)
-      .input("sic_date", sql.Date, toSqlDate(data.sic_date))
-      .input("pass_issued", sql.Bit, data.pass_issued)
-      .input("expiry_date", sql.Date, data.expiry_date ? toSqlDate(data.expiry_date) : null)
-      .input("attachment_id", sql.UniqueIdentifier, data.attachment_id);
-
-    if (data.id) {
-      const { rowsAffected } = await req
-        .input("id", sql.UniqueIdentifier, data.id)
-        .input("employee_id", sql.UniqueIdentifier, data.employee_ids[0])
-        .query(
-          `UPDATE dbo.sic_records
-              SET site_id = @site_id, employee_id = @employee_id, sic_date = @sic_date,
-                  pass_issued = @pass_issued, expiry_date = @expiry_date, attachment_id = @attachment_id
-            WHERE id = @id`,
-        );
-      if (!rowsAffected[0]) throw new Error("This SIC record no longer exists.");
-      return { count: 1 };
+  .inputValidator((d: unknown) => sicSchema.parse(d))
+  .handler(async ({ data: { id, employee_ids, ...base } }) => {
+    const { insertRow, updateRow } = await import("@/server/rows.server");
+    if (id) {
+      await updateRow("sic_records", id, { ...base, employee_id: employee_ids[0] });
+    } else {
+      for (const employee_id of employee_ids)
+        await insertRow("sic_records", { ...base, employee_id });
     }
-
-    // One INSERT statement, so either every selected technician is registered or none is.
-    const values = data.employee_ids.map((employeeId, i) => {
-      req.input(`e${i}`, sql.UniqueIdentifier, employeeId);
-      return `(@site_id, @e${i}, @sic_date, @pass_issued, @expiry_date, @attachment_id)`;
-    });
-    await req.query(
-      `INSERT INTO dbo.sic_records (site_id, employee_id, sic_date, pass_issued, expiry_date, attachment_id)
-       VALUES ${values.join(",\n")}`,
-    );
-    return { count: values.length };
+    return { ok: true };
   });
 
 export const deleteSicRecord = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
-  .inputValidator((d: { id: string }) => z.object({ id: idSchema }).parse(d))
+  .inputValidator((d: unknown) => deleteSchema.parse(d))
   .handler(async ({ data }) => {
-    const { request, sql } = await import("@/server/db.server");
-    const req = await request();
-    await req
-      .input("id", sql.UniqueIdentifier, data.id)
-      .query(`DELETE FROM dbo.sic_records WHERE id = @id`);
+    const { deleteRow } = await import("@/server/rows.server");
+    await deleteRow("sic_records", data.id);
     return { ok: true };
+  });
+
+const bookingSchema = z.object({
+  id: id.optional(),
+  site_id: id,
+  contact_person: z.string().trim().min(1, "Enter a contact person.").max(200),
+  email: z.string().trim().min(1, "Enter an email.").max(320),
+  mobile: z.string().trim().min(1, "Enter a mobile number.").max(50),
+  sic_session: optionalText,
+  remarks: optionalText,
+  note: optionalText,
+  attachment_url: filePath,
+});
+
+export const saveBooking = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) => bookingSchema.parse(d))
+  .handler(async ({ data: { id, ...row } }) => {
+    const { insertRow, updateRow } = await import("@/server/rows.server");
+    if (id) await updateRow("booking_instructions", id, row);
+    else await insertRow("booking_instructions", row);
+    return { ok: true };
+  });
+
+export const deleteBooking = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) => deleteSchema.parse(d))
+  .handler(async ({ data }) => {
+    const { deleteRow } = await import("@/server/rows.server");
+    await deleteRow("booking_instructions", data.id);
+    return { ok: true };
+  });
+
+/** Stores an uploaded picture/attachment and returns the path to save on the row. */
+export const uploadFile = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .inputValidator((d: unknown) => {
+    if (!(d instanceof FormData)) throw new Error("Expected form data.");
+    const file = d.get("file");
+    const folder = d.get("folder");
+    if (!(file instanceof File) || file.size === 0) throw new Error("Choose a file to upload.");
+    return { file, folder: typeof folder === "string" ? folder : "files" };
+  })
+  .handler(async ({ data }) => {
+    const { saveFile } = await import("@/server/files.server");
+    return { path: await saveFile(data.file, data.folder) };
   });

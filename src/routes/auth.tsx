@@ -1,9 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { bootstrapFirstAdmin, isSetupRequired, MIN_PASSWORD_LENGTH, signIn } from "@/lib/auth.functions";
+import { useQueryClient } from "@tanstack/react-query";
+import { signIn, signUp } from "@/lib/auth.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/sic-ui";
@@ -22,10 +22,8 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const nav = useNavigate();
-  const queryClient = useQueryClient();
-  // A new database has no accounts: the first one created here becomes the admin.
-  const setup = useQuery({ queryKey: ["setup-required"], queryFn: () => isSetupRequired() }).data;
-  const firstRun = setup?.setupRequired === true;
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,12 +32,12 @@ function AuthPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      if (firstRun) {
-        await bootstrapFirstAdmin({ data: { email, password } });
-        toast.success("Admin account created. Signing you in…");
+      if (mode === "up") {
+        await signUp({ data: { email, password } });
+        toast.success("Account created.");
       }
       await signIn({ data: { email, password } });
-      await queryClient.invalidateQueries();
+      qc.clear();
       nav({ to: "/dashboard" });
     } catch (err) {
       toast.error((err as Error).message);
@@ -67,8 +65,8 @@ function AuthPage() {
             <span className="text-sun">cleared for the right site.</span>
           </h1>
           <p className="mt-4 max-w-md text-nav-muted">
-            Track every safety induction course across your client sites, catch expiries before they happen, and plan
-            daily jobs with confidence.
+            Track every safety induction course across your client sites, catch expiries before they
+            happen, and plan daily jobs with confidence.
           </p>
         </div>
         <div className="flex gap-2">
@@ -81,11 +79,11 @@ function AuthPage() {
       <div className="flex items-center justify-center p-6">
         <form onSubmit={submit} className="w-full max-w-sm space-y-5">
           <div>
-            <h2 className="text-2xl font-bold">{firstRun ? "Create admin account" : "Welcome back"}</h2>
+            <h2 className="text-2xl font-bold">
+              {mode === "in" ? "Welcome back" : "Create account"}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              {firstRun
-                ? "No accounts exist yet. The first account you create becomes the admin."
-                : "Sign in to your SIC workspace"}
+              {mode === "in" ? "Sign in to your SIC workspace" : "Register a new staff account"}
             </p>
           </div>
           <Field label="Email">
@@ -95,19 +93,21 @@ function AuthPage() {
             <Input
               type="password"
               required
-              minLength={firstRun ? MIN_PASSWORD_LENGTH : undefined}
+              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
           <Button type="submit" variant="hero" className="h-11 w-full" disabled={busy}>
-            {busy ? "Please wait…" : firstRun ? "Create account" : "Sign in"}
+            {busy ? "Please wait…" : mode === "in" ? "Sign in" : "Sign up"}
           </Button>
-          {!firstRun && (
-            <p className="text-center text-xs text-muted-foreground">
-              New accounts are created by an admin from the Users page.
-            </p>
-          )}
+          <button
+            type="button"
+            className="w-full text-sm text-muted-foreground hover:text-foreground"
+            onClick={() => setMode(mode === "in" ? "up" : "in")}
+          >
+            {mode === "in" ? "No account? Sign up" : "Have an account? Sign in"}
+          </button>
         </form>
       </div>
     </div>
